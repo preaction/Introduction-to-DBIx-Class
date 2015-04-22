@@ -23,6 +23,7 @@
 ## `runs`
 
 * id
+* job_id
 * start
 * end
 * status
@@ -55,36 +56,40 @@
 ---
 
 ```
->>> SELECT id, name FROM person WHERE username = "preaction"
-id          name
-----------  ----------
-1           Doug
+>>> SELECT id, name FROM jobs WHERE type = "Qar::Extract";
+id     name
+-----  ------------------------------
+1      int_rate_fixings_emea
+2      int_rate_fixings_amrs
+4      ccy_spot
 ```
 
 ---
 
 ```
->>> INSERT INTO profile ( person_id, twitter, github )
-..> VALUES ( 1, "preaction", "preaction" );
+>>> INSERT INTO jobs ( type, name )
+..> VALUES ( "Qar::Ops", "Qar::Ops::WmrSpotRates" );
 ```
 
 ---
 
 ```
->>> UPDATE person
-..> SET name = "Doug Bell" 
-..> WHERE username = "preaction"
+>>> UPDATE runs
+..> SET status = "done"
+..> WHERE id = 4
 ```
 
 ---
 
 ```
->>> SELECT id, name, twitter FROM person
-..> JOIN profile ON person.id = profile.person_id
-..> WHERE username = "preaction";
-id          name        twitter
-----------  ----------  ----------
-1           Doug Bell   preaction
+>>> SELECT runs.id AS run_id, jobs.name, runs.status
+..> FROM runs
+..> JOIN jobs ON jobs.id = runs.job_id
+..> WHERE runs.status = "error";
+run_id    name                            status
+--------  ------------------------------  -------
+3         int_rate_fixings_emea           error
+4         bbg_fx_spot                     error
 ```
 ---
 
