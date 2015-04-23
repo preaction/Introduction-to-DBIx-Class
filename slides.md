@@ -10,6 +10,15 @@
 
 ---
 
+# ETL Job Reporting Database
+## Extract, Transform, Load
+
+---
+
+# Jobs writing data to databases
+
+---
+
 # We have Jobs
 ## `jobs`
 
@@ -119,6 +128,14 @@ __PACKAGE__->load_namespaces;
 
 ---
 
+# Connect to the Database
+
+```
+my $schema = My::Schema->connect( 'dbi:SQLite:data.db' );
+```
+
+---
+
 # Set Aside
 
 ------
@@ -205,11 +222,147 @@ __PACKAGE__->add_columns( qw( run_id dest_id ) );
 
 ------
 
+# Resultsets
+## (Queries)
+
+---
+
+# Query All Jobs
+
+---
+
+```perl
+my $job_rs = $schema->resultset( 'Job' );
+```
+```
+SELECT * FROM jobs
+```
+
+---
+
+# Retrieve Results
+## My::Schema::Result::Job objects
+
+---
+
+```perl
+for my $job ( $job_rs->all ) {
+    say join ": ", $job->type, $job->name;
+}
+```
+
+---
+
+```
+$ perl bin/list-jobs.pl
+Qar::Extract: int_rate_fixings_emea
+Qar::Extract: int_rate_fixings_amrs
+Qar::Spider: bbg_fx_spot
+Qar::Extract: ccy_spot
+```
+---
+
+# Search Jobs
+
+---
+
+```perl
+my $extract_job_rs = $job_rs->search({
+    type => 'Qar::Extract',
+});
+```
+```
+SELECT * FROM jobs
+    WHERE type = 'Qar::Extract'
+```
+
+---
+
+# Logical Comparisons
+
+---
+
+```perl
+my $int_rate_extract_job_rs
+    = $extract_job_rs->search({
+        name => { LIKE => 'int_rate_%' },
+    });
+```
+```
+SELECT * FROM jobs
+    WHERE type = 'Qar::Extract'
+        AND name LIKE 'int_rate_%'
+```
+
+---
+
+# Search Returns Resultset
+## Chain them together!
+
+---
+
+# Combined into one
+
+---
+
+```perl
+my $int_rate_extract_job_rs
+    = $schema->resultset( 'Job' )
+    ->search({
+        type => 'Qar::Extract',
+        name => { LIKE => 'int_rate_%' },
+    });
+```
+```
+SELECT * FROM jobs
+    WHERE type = 'Qar::Extract'
+        AND name LIKE 'int_rate_%'
+```
+
+---
+
+# Resultset Iterator
+
+---
+
+```perl
+while ( my $job = $job_rs->next ) {
+    say join ": ", $job->type, $job->name;
+}
+```
+
+---
+
+# Insert Data
+
+---
+
+# Add a Job
+
+```perl
+my $job_rs = $schema->resultset( 'Job' );
+my $job = $job_rs->create({
+    type => 'Qar::Spider',
+    name => 'mim_misc_reuters',
+});
+say "New Job ID: " . $job->id;
+```
+```
+INSERT INTO jobs ( type, name )
+    VALUES ( 'Qar::Spider', 'mim_misc_reuters' )
+```
+
+------
+
 # Relationships
 
 ---
 
-# Job has many Runs
+# The Reason to use a Relational Database
+
+---
+
+# A Job has many Runs
 
 ---
 
@@ -222,7 +375,7 @@ __PACKAGE__->has_many(
 
 ---
 
-# Run belongs to Job
+# A Run belongs to Job
 
 ---
 
@@ -235,7 +388,7 @@ __PACKAGE__->belongs_to(
 
 ---
 
-# Run has many Run Destinations
+# A Run has many Run Destinations
 
 ---
 
@@ -248,7 +401,7 @@ __PACKAGE__->has_many(
 
 ---
 
-# Destination has many Run Destinations
+# A Destination has many Run Destinations
 
 ---
 
@@ -271,26 +424,28 @@ __PACKAGE__->belongs_to(
     run => 'My::Schema::Result::Run' => 'run_id',
 );
 __PACKAGE__->belongs_to(
-    dest => 'My::Schema::Result::Destination' => 'dest_id',
+    destination => 'My::Schema::Result::Destination' => 'dest_id',
 );
 ```
 
 ---
 
-# Run has many Destinations
+# A Run has many Destinations
+## run -> run_dest -> dest
 
 ---
 
 ```
 package My::Schema::Result::Run;
 __PACKAGE__->many_to_many(
-    dests => 'My::Schema::Result::RunDestination' => 'dest',
+    destinations => 'My::Schema::Result::RunDestination' => 'destination',
 );
 ```
 
 ---
 
 # Destination has many Runs
+## dest -> run_dest -> run
 
 ---
 
@@ -303,9 +458,243 @@ __PACKAGE__->many_to_many(
 
 ------
 
-# Resultsets
+# Relationship Resultsets
+## (Queries)
 
-XXX
+---
+
+# Add a Run
+
+---
+
+```perl
+my $run_rs = $schema->resultset( 'Run' );
+my $run = $run_rs->create({
+    start => '2015-04-23T18:41:19Z',
+    status => 'running',
+    job_id => 1,
+});
+say "New Run ID: " . $run->id;
+```
+
+---
+
+# Use the Relationship!
+
+---
+
+# Find the right Job
+## Create it if it doesn't exist!
+
+---
+
+```perl
+my $run_rs = $schema->resultset( 'Run' );
+my $run = $run_rs->create({
+    start => '2015-04-23T18:41:19Z',
+    status => 'running',
+    job => {
+        type => 'Qar::Extract',
+        name => 'ccy_spot',
+    },
+});
+say "New Run ID: " . $run->id;
+```
+
+---
+
+# List Runs
+## With Job information
+
+---
+
+# belongs_to are Result objects
+```perl
+for my $run ( $run_rs->all ) {
+    say sprintf "%s (%s): %s (%s)",
+        $run->job->name,
+        $run->job->type,
+        $run->status,
+        $run->start;
+}
+```
+
+---
+
+# List Jobs
+## With Latest Run information
+
+---
+
+# has_many are Resultset objects
+```perl
+for my $job ( $job_rs->all ) {
+    my $latest_run_rs = $job->runs->search(
+        { },
+        {
+            order_by => { -desc => 'start' },
+            limit => 1,
+        },
+    );
+```
+
+---
+
+```
+    if ( my $run = $latest_run_rs->next ) {
+        say sprintf '%s (%s): %s (%s)',
+            $job->name, $job->type,
+            $run->status, $run->start;
+    }
+    else {
+        say sprintf '%s (%s): Never run',
+            $job->name, $job->type;
+    }
+}
+```
+
+------
+
+# Custom Methods
+## Simplify Common Tasks
+
+---
+
+# Add Result methods
+
+---
+
+# Get the latest Run for a Job
+
+---
+
+```perl
+package My::Schema::Result::Job;
+
+sub latest_run {
+    my ( $self, %search ) = @_;
+
+    my $latest_run_rs = $self->runs->search(
+        \%search,
+        {
+            order_by => { -desc => 'start' },
+            limit => 1,
+        },
+    );
+
+    return $latest_run_rs->next;
+}
+```
+
+---
+
+```
+my $run = $job->latest_run;
+my $last_success = $job->latest_run( status => 'success' );
+```
+
+---
+
+# Add Resultset methods
+
+---
+
+# Start a Run
+* Set defaults
+* Add corresponding Job
+
+---
+
+```perl
+package My::Schema::ResultSet::Run;
+use base 'DBIx::Class::ResultSet';
+
+sub start_run {
+    my ( $self, %attrs ) = @_;
+```
+
+---
+
+```perl
+    # Get required job info
+    my %job_attrs;
+    for my $attr ( qw( type name ) ) {
+        $job_attr{ $attr } = delete $attrs{ $attr }
+            or die "Missing job $attr";
+    }
+```
+
+---
+
+```perl
+    # Set defaults
+    $attrs{ status } ||= "running";
+    $attrs{ start } ||= gmtime->strftime( "%FT%TZ" );
+```
+
+---
+
+```perl
+    # Create the run
+    return $self->create(
+        job => \%job_attrs,
+        %attrs,
+    );
+}
+```
+
+---
+
+```perl
+$schema->resultset( 'Run' )->start_run(
+    type => 'Qar::Spider',
+    name => 'mim_misc_reuters',
+);
+```
+
+------
+
+# Tips and Tricks
+
+---
+
+# DBIC_TRACE=1
+
+---
+
+```
+$ DBIC_TRACE=1 perl bin/list-jobs.pl
+SELECT me.id, me.type, me.name FROM jobs me:
+SELECT me.id, me.job_id, me.start, me.end, me.status FROM runs me
+WHERE ( me.job_id = ? ) ORDER BY start DESC: '1'
+int_rate_fixings_emea (Qar::Extract): error (2015-04-04T18:00:01Z)
+SELECT me.id, me.job_id, me.start, me.end, me.status FROM runs me
+WHERE ( me.job_id = ? ) ORDER BY start DESC: '2'
+int_rate_fixings_amrs (Qar::Extract): Never run
+SELECT me.id, me.job_id, me.start, me.end, me.status FROM runs me
+WHERE ( me.job_id = ? ) ORDER BY start DESC: '3'
+bbg_fx_spot (Qar::Spider): error (2015-04-04T04:30:01Z)
+```
+
+---
+
+# DBIx::Class::Schema::Loader
+
+---
+
+# Build a Schema from an existing Database
+
+---
+
+```
+$ dbicdump -o dump_directory=./tmp Dump::Schema dbi:SQLite:data.db
+```
+
+------
+
+# See Also
+* [DBIx::Class docs](http://metacpan.org/pod/DBIx::Class)
+
 
 ------
 
