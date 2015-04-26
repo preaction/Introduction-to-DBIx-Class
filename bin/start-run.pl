@@ -26,4 +26,4 @@ __END__
 
 =head1 SYNOPSIS
 
-    add-run.pl <type> <name>
+    start-run.pl <type> <name>

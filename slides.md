@@ -352,6 +352,44 @@ INSERT INTO jobs ( type, name )
     VALUES ( 'Qar::Spider', 'mim_misc_reuters' )
 ```
 
+---
+
+# Update Data
+
+---
+
+# Find and Update a Job
+
+```perl
+my $job_rs = $schema->resultset( 'Job' );
+my $job = $job_rs->find( 3 );
+$job->update({
+    name => 'mim_misc_reuters_nofill',
+});
+```
+```
+UPDATE jobs SET name = "mim_misc_reuters_nofill"
+    WHERE id = 3
+```
+
+---
+
+# Update Multiple Jobs
+
+```perl
+my $job_rs = $schema->resultset( 'Job' );
+my $spider_jobs = $job_rs->search({
+    type => 'Qar::Spider',
+});
+$spider_jobs->update({
+    type => 'Boa::ETL',
+});
+```
+```
+UPDATE jobs SET type = "Boa::ETL"
+    WHERE type = "Qar::Spider"
+```
+
 ------
 
 # Relationships
